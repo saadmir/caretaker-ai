@@ -1,0 +1,25 @@
+[Unit]
+Description=Caretaker AI home server (MQTT broker, AI gardener, dashboard)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=caretaker
+WorkingDirectory=/opt/caretaker-ai/server
+ExecStart=/usr/bin/node dist/main.js
+Restart=always
+RestartSec=5
+Environment=NODE_ENV=production
+# The one privilege it gets: listening on ports below 1024 (the dashboard on port 80).
+AmbientCapabilities=CAP_NET_BIND_SERVICE
+CapabilityBoundingSet=CAP_NET_BIND_SERVICE
+# Hardening: read-only filesystem except the data folder
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/caretaker-ai/server/data
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

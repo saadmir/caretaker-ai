@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0f172a">
+<title>Caretaker AI</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<main>
+  <h1>Caretaker AI <span id="conn" class="pill">connecting…</span></h1>
+
+  <section id="hero" class="card hero">
+    <h2>Sprinkler</h2>
+    <svg class="drop" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2.5S5 10.2 5 14.5a7 7 0 0 0 14 0C19 10.2 12 2.5 12 2.5z"/></svg>
+    <div id="state" class="state">—</div>
+    <div id="sub" class="sub"></div>
+    <div class="controls">
+      <select id="minutes" aria-label="Run time">
+        <option value="5">5 min</option><option value="10">10 min</option><option value="15">15 min</option>
+        <option value="30" selected>30 min</option><option value="45">45 min</option><option value="60">60 min</option>
+        <option value="0">Until I stop it</option>
+      </select>
+      <button id="toggle" disabled>Turn on</button>
+    </div>
+    <div id="err" class="err"></div>
+  </section>
+
+  <section class="card">
+    <div class="row">
+      <div><h2 style="margin:0">Automatic watering</h2><div id="autoDesc" class="sub" style="font-size:14px"></div></div>
+      <label class="switch"><input type="checkbox" id="auto"><span class="slider"></span></label>
+    </div>
+    <div id="decision" class="note"></div>
+  </section>
+
+  <section class="card">
+    <div class="row"><h2 style="margin:0">AI gardener</h2><span id="aiStatus" class="pill"></span></div>
+    <div class="seg" id="aiMode" style="margin-top:12px">
+      <button data-mode="off">Off</button><button data-mode="advise">Advise</button><button data-mode="auto">Auto</button>
+    </div>
+    <div id="aiModeDesc" class="sub" style="font-size:13px;margin-top:6px"></div>
+    <div id="aiLatest"></div>
+    <button id="aiAsk" class="secondary">Ask AI now</button>
+    <div id="aiErr" class="err"></div>
+    <details id="aiPast"><summary>Earlier decisions</summary><ul id="aiPastList"></ul></details>
+  </section>
+
+  <section class="card">
+    <h2>Garden notes for the AI</h2>
+    <textarea id="noteText" rows="2" maxlength="500" placeholder="e.g. Planted new aloes at the bottom; top-left looks shriveled; away until Sunday"></textarea>
+    <button id="noteAdd" class="secondary">Add note</button>
+    <ul id="notes" class="notes"></ul>
+  </section>
+
+  <section class="card">
+    <h2>History</h2>
+    <dl>
+      <dt>Last rain</dt><dd id="lastRain">—</dd>
+      <dt>Last watered</dt><dd id="lastWatered">—</dd>
+      <dt>Next auto run due</dt><dd id="dueAt">—</dd>
+      <dt>Flow rate</dt><dd id="gpm">—</dd>
+    </dl>
+    <h2 style="margin-top:16px">Recent waterings</h2>
+    <ul id="waterings" class="log"></ul>
+  </section>
+
+  <section class="card">
+    <div class="row"><h2 style="margin:0">Weather</h2><span id="wAge" class="pill"></span></div>
+    <dl style="margin-top:10px">
+      <dt>Now</dt><dd id="wNow">—</dd>
+      <dt>Next 24 h</dt><dd id="wNext">—</dd>
+      <dt>Rain forecast</dt><dd id="wFc">—</dd>
+    </dl>
+    <div id="wErr" class="note warn" hidden></div>
+  </section>
+
+  <section class="card">
+    <h2>Controller</h2>
+    <dl>
+      <dt>ESP32</dt><dd id="dOnline">—</dd>
+      <dt>Wi-Fi signal</dt><dd id="dRssi">—</dd>
+      <dt>Last heartbeat</dt><dd id="dSeen">—</dd>
+      <dt>Firmware failsafe</dt><dd id="dFail">—</dd>
+      <dt>Flow sensor</dt><dd id="dFlow">—</dd>
+    </dl>
+  </section>
+
+  <section class="card">
+    <h2>Activity</h2>
+    <ul id="log" class="log"></ul>
+  </section>
+</main>
+
+<script src="app.js"></script>
+</body>
+</html>

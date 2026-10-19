@@ -1,0 +1,15 @@
+# Secrets and private details: never commit
+.env
+**/include/config.h
+server/garden.md
+
+# Build output and local state
+node_modules/
+dist/
+data/
+.pio/
+*.tmp
+.DS_Store
+
+# Original phone screenshots (cleaned copies live in docs/images)
+docs/IMG_*
