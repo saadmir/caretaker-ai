@@ -32,6 +32,30 @@ export function parseAiMode(raw: string): AiMode {
   throw new Error(`AI mode must be off, advise or auto, got "${raw}"`);
 }
 
+/**
+ * One entry per valve on the sprinkler ESP32 (RELAY_PINS in the firmware's config.h).
+ * Emitters are used to estimate gallons until a flow meter has measured some waterings;
+ * an emitter count of 0 means "not known yet".
+ */
+function zoneList() {
+  const count = num('ZONE_COUNT', 1);
+  if (!Number.isInteger(count) || count < 1) throw new Error('ZONE_COUNT must be a whole number, 1 or more');
+  return Array.from({ length: count }, (_, i) => {
+    const id = i + 1;
+    const z = `ZONE${id}_`;
+    // Zone 1 also accepts the settings from before zones existed.
+    const legacy = (name: string) => (id === 1 ? process.env[name] : undefined);
+    return {
+      id,
+      name: str(`${z}NAME`, `Zone ${id}`),
+      emitterCount: num(`${z}EMITTER_COUNT`, Number(legacy('EMITTER_COUNT') ?? 0)),
+      emitterGph: num(`${z}EMITTER_GPH`, Number(legacy('EMITTER_GPH') ?? 1)),
+      // Pots and thirsty plants may need a shorter gap than the AI's default minimum.
+      minHoursBetweenWaterings: num(`${z}AI_MIN_HOURS_BETWEEN_WATERINGS`, num('AI_MIN_HOURS_BETWEEN_WATERINGS', 48)),
+    };
+  });
+}
+
 // Set the process timezone before any date is formatted, so "local time" is the garden's.
 process.env.TZ = str('TIMEZONE', Intl.DateTimeFormat().resolvedOptions().timeZone);
 
@@ -48,8 +72,10 @@ export const config = {
     port: num('MQTT_PORT', 1883),
     username: str('MQTT_USERNAME', 'sprinkler'),
     password: str('MQTT_PASSWORD'),
-    topicBase: str('MQTT_TOPIC_BASE', 'sprinkler/zone1'),
+    topicBase: str('MQTT_TOPIC_BASE', 'sprinkler'), // zones are <base>/zone1, <base>/zone2, ...
   },
+
+  zones: zoneList(),
 
   // Required: the weather forecast and the AI both depend on where the garden is.
   location: {
@@ -80,12 +106,6 @@ export const config = {
     longRunMinutes: num('LONG_RUN_ALERT_MINUTES', 30),
     longRunRepeatMinutes: num('LONG_RUN_ALERT_REPEAT_MINUTES', 15),
     offlineAfterMinutes: num('OFFLINE_ALERT_MINUTES', 3),
-  },
-
-  // Used to estimate gallons until the flow meter has measured a few waterings.
-  irrigation: {
-    emitterCount: num('EMITTER_COUNT', 40),
-    emitterGph: num('EMITTER_GPH', 5),
   },
 
   flow: {
@@ -130,4 +150,5 @@ if (config.bark.encryptionKey && Buffer.byteLength(config.bark.encryptionKey) !=
 }
 
 export type Config = typeof config;
+export type ZoneConfig = Config['zones'][number];
 export type AiLimits = Config['ai']['limits'];

@@ -14,11 +14,11 @@ async function main() {
 
   const broker = new Broker(config.mqtt);
   await broker.start();
-  const sprinkler = new Sprinkler(broker, config.mqtt.topicBase, config.flow.pulsesPerLiter);
+  const sprinklers = config.zones.map((z) => new Sprinkler(broker, config.mqtt.topicBase, z.id, config.flow.pulsesPerLiter));
 
-  const watering = new WateringController(sprinkler, store);
+  const watering = new WateringController(sprinklers, store);
   watering.start();
-  const http = startWeb(sprinkler, watering, store);
+  const http = startWeb(watering, store);
 
   store.log('info', 'Server started');
   void notify('Caretaker server started', `Dashboard on port ${config.web.port}.`, { priority: 'low' });

@@ -1,13 +1,13 @@
 import { EventEmitter } from 'node:events';
 import type { Broker } from '../mqtt/broker.js';
 
-// The sprinkler ESP32 (firmware/sprinkler). It owns the relay and its own run timer;
-// this class sends it commands and keeps track of what it reports.
+// One valve (zone) of the sprinkler ESP32 (firmware/sprinkler). The ESP32 owns the relays
+// and their run timers; this class sends one zone's commands and tracks what it reports.
 //
-// Topics, under e.g. "sprinkler/zone1":
-//   cmd           server -> ESP32   {"action":"on","durationSec":600,"reason":"ai"} | {"action":"off"} | {"action":"ping"}
-//   state         ESP32 -> server   retained JSON, on every change and every 30 s (5 s while water flows)
-//   availability  ESP32 -> server   "online" / "offline" (retained; "offline" is the MQTT last will)
+// Topics, under e.g. "sprinkler":
+//   zone<N>/cmd    server -> ESP32   {"action":"on","durationSec":600,"reason":"ai"} | {"action":"off"} | {"action":"ping"}
+//   zone<N>/state  ESP32 -> server   retained JSON, on every change and every 30 s (5 s while water flows)
+//   availability   ESP32 -> server   "online" / "offline" for the whole board (retained; "offline" is the MQTT last will)
 
 export type ValveState = 'on' | 'off' | 'unknown';
 
@@ -22,7 +22,7 @@ export interface SprinklerStatus {
   rssi: number | null;
   fw: string | null;
   failsafeMin: number | null;
-  flowGpm: number | null; // null = no flow sensor reporting
+  flowGpm: number | null; // null = no flow sensor on this zone
   runGallons: number | null; // this run so far, or the last run once the valve is off
 }
 
@@ -67,13 +67,17 @@ export class Sprinkler extends EventEmitter<SprinklerEvents> {
     runGallons: null,
   };
 
+  private readonly zoneTopic: string;
+
   constructor(
     private readonly broker: Broker,
-    private readonly topicBase: string,
+    topicBase: string,
+    readonly zone: number,
     private readonly pulsesPerLiter: number,
   ) {
     super();
-    broker.subscribe(`${topicBase}/state`, (raw) => this.onState(raw));
+    this.zoneTopic = `${topicBase}/zone${zone}`;
+    broker.subscribe(`${this.zoneTopic}/state`, (raw) => this.onState(raw));
     broker.subscribe(`${topicBase}/availability`, (raw) => this.setOnline(raw === 'online'));
   }
 
@@ -101,7 +105,7 @@ export class Sprinkler extends EventEmitter<SprinklerEvents> {
 
   private send(cmd: object): void {
     // Never retained: a rebooting ESP32 must not replay an old "on".
-    this.broker.publish(`${this.topicBase}/cmd`, cmd, { qos: 1, retain: false });
+    this.broker.publish(`${this.zoneTopic}/cmd`, cmd, { qos: 1, retain: false });
   }
 
   private setOnline(online: boolean): void {
@@ -117,7 +121,7 @@ export class Sprinkler extends EventEmitter<SprinklerEvents> {
     try {
       p = JSON.parse(raw) as StatePayload;
     } catch {
-      console.warn('[sprinkler] bad state payload', raw);
+      console.warn(`[sprinkler] zone ${this.zone}: bad state payload`, raw);
       return;
     }
     if (p.state !== 'on' && p.state !== 'off') return;

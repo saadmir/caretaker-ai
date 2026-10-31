@@ -3,7 +3,8 @@ import { z } from 'zod';
 // The shape Claude must answer in. The API enforces it (structured output), so the
 // reply always parses; whether the plan is *safe* is checked separately in plan.ts.
 
-export const WateringDecision = z.object({
+export const ZoneDecision = z.object({
+  zone: z.number().describe('The zone number this plan is for.'),
   action: z.enum(['water', 'skip']),
   start_time: z
     .string()
@@ -13,8 +14,14 @@ export const WateringDecision = z.object({
     .number()
     .describe('Pause between cycles so water soaks in. 0 for a single cycle or when skipping.'),
   soil_estimate: z.enum(['dry', 'slightly dry', 'moist', 'wet']),
-  headline: z.string().describe('One short line for a phone notification.'),
-  reasoning: z.string().describe('2-5 plain-English sentences for the homeowner explaining the decision.'),
+  note: z.string().describe('One short sentence for the homeowner about this zone.'),
 });
 
+export const WateringDecision = z.object({
+  zones: z.array(ZoneDecision).describe('Exactly one plan per zone.'),
+  headline: z.string().describe('One short line for a phone notification, covering all zones.'),
+  reasoning: z.string().describe('2-6 plain-English sentences for the homeowner explaining the decision for each zone.'),
+});
+
+export type ZoneDecision = z.infer<typeof ZoneDecision>;
 export type WateringDecision = z.infer<typeof WateringDecision>;

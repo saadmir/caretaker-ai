@@ -100,13 +100,14 @@ decision logic; it does a few things it must never get wrong:
 
 ## MQTT protocol
 
-Base topic `sprinkler/zone1` (one ESP32 per zone or device).
+Base topic `sprinkler`. One ESP32 drives every valve; each valve is a zone with its own
+`zone<N>` topics, numbered in the order of `RELAY_PINS` in the firmware's `config.h`.
 
 | Topic | Direction | Payload |
 |---|---|---|
-| `…/cmd` | server → ESP32 (QoS 1, never retained) | `{"action":"on","durationSec":600,"reason":"ai"}`, `{"action":"off","reason":"manual"}`, `{"action":"ping"}` |
-| `…/state` | ESP32 → server (retained) | `{"state":"on","reason":"ai","onForSec":12,"remainingSec":588,"rssi":-61,"ip":"…","fw":"1.1.0","failsafeMin":120,"flowPulses":51234,"runPulses":4210,"flowPps":14.4}`. Sent on every change, every 30 s, and every 5 s while water flows |
-| `…/availability` | ESP32 → server (retained, last will) | `online` / `offline` |
+| `…/zone<N>/cmd` | server → ESP32 (QoS 1, never retained) | `{"action":"on","durationSec":600,"reason":"ai"}`, `{"action":"off","reason":"manual"}`, `{"action":"ping"}` |
+| `…/zone<N>/state` | ESP32 → server (retained) | `{"state":"on","reason":"ai","onForSec":12,"remainingSec":588,"rssi":-61,"ip":"…","fw":"1.2.0","failsafeMin":120,"flowPulses":51234,"runPulses":4210,"flowPps":14.4}`. The flow fields only come from the zone with the meter (`FLOW_ZONE`). Sent on every change, every 30 s, and every 5 s while water flows or any valve is open |
+| `…/availability` | ESP32 → server (retained, last will) | `online` / `offline`, for the whole board |
 
 ## REST API
 
@@ -114,8 +115,8 @@ Base topic `sprinkler/zone1` (one ESP32 per zone or device).
 |---|---|
 | `GET /api/status` | Full dashboard snapshot |
 | `GET /api/stream` | Server-Sent Events: the snapshot on connect and on every change |
-| `POST /api/valve` `{"action":"on","minutes":30}` / `{"action":"off"}` | Manual run (`minutes: 0` = until stopped, still capped by the failsafe) |
-| `POST /api/auto` `{"enabled":false}` | Pause or resume automatic watering |
+| `POST /api/valve` `{"zone":2,"action":"on","minutes":30}` / `{"zone":2,"action":"off"}` | Manual run of one zone (`zone` defaults to 1; `minutes: 0` = until stopped, still capped by the failsafe) |
+| `POST /api/auto` `{"enabled":false}` / `{"zone":2,"enabled":true}` | Pause or resume all automatic watering, or switch it for one zone |
 | `POST /api/ai/mode` `{"mode":"advise"}` | `off`, `advise` or `auto` |
 | `POST /api/ai/decide` | Ask the AI now |
 | `POST /api/notes` `{"text":"…"}` · `POST /api/notes/delete` `{"at":"…"}` | Garden notes for the AI |

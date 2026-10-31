@@ -11,21 +11,7 @@
 <main>
   <h1>Caretaker AI <span id="conn" class="pill">connecting…</span></h1>
 
-  <section id="hero" class="card hero">
-    <h2>Sprinkler</h2>
-    <svg class="drop" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2.5S5 10.2 5 14.5a7 7 0 0 0 14 0C19 10.2 12 2.5 12 2.5z"/></svg>
-    <div id="state" class="state">—</div>
-    <div id="sub" class="sub"></div>
-    <div class="controls">
-      <select id="minutes" aria-label="Run time">
-        <option value="5">5 min</option><option value="10">10 min</option><option value="15">15 min</option>
-        <option value="30" selected>30 min</option><option value="45">45 min</option><option value="60">60 min</option>
-        <option value="0">Until I stop it</option>
-      </select>
-      <button id="toggle" disabled>Turn on</button>
-    </div>
-    <div id="err" class="err"></div>
-  </section>
+  <div id="zones" class="zones"></div>
 
   <section class="card">
     <div class="row">
@@ -33,6 +19,7 @@
       <label class="switch"><input type="checkbox" id="auto"><span class="slider"></span></label>
     </div>
     <div id="decision" class="note"></div>
+    <div id="autoErr" class="err"></div>
   </section>
 
   <section class="card">
@@ -56,12 +43,7 @@
 
   <section class="card">
     <h2>History</h2>
-    <dl>
-      <dt>Last rain</dt><dd id="lastRain">—</dd>
-      <dt>Last watered</dt><dd id="lastWatered">—</dd>
-      <dt>Next auto run due</dt><dd id="dueAt">—</dd>
-      <dt>Flow rate</dt><dd id="gpm">—</dd>
-    </dl>
+    <dl id="hist"></dl>
     <h2 style="margin-top:16px">Recent waterings</h2>
     <ul id="waterings" class="log"></ul>
   </section>
@@ -92,6 +74,28 @@
     <ul id="log" class="log"></ul>
   </section>
 </main>
+
+<template id="zoneTpl">
+  <section class="card hero">
+    <div class="row zhead">
+      <h2 class="zname"></h2>
+      <label class="zauto-label">Auto <span class="switch small"><input type="checkbox" class="zauto"><span class="slider"></span></span></label>
+    </div>
+    <svg class="drop" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2.5S5 10.2 5 14.5a7 7 0 0 0 14 0C19 10.2 12 2.5 12 2.5z"/></svg>
+    <div class="state">—</div>
+    <div class="sub zsub"></div>
+    <div class="controls">
+      <select class="zmin" aria-label="Run time">
+        <option value="5">5 min</option><option value="10">10 min</option><option value="15">15 min</option>
+        <option value="30" selected>30 min</option><option value="45">45 min</option><option value="60">60 min</option>
+        <option value="0">Until I stop it</option>
+      </select>
+      <button class="ztoggle" disabled>Turn on</button>
+    </div>
+    <div class="err zerr"></div>
+    <div class="note zrule"></div>
+  </section>
+</template>
 
 <script src="app.js"></script>
 </body>

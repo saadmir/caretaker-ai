@@ -1,7 +1,7 @@
 import type { AiLimits } from '../config.js';
 import type { AiCycle } from '../store.js';
 import { fmtClock, HOUR, localDate, localTime, MIN } from '../util/time.js';
-import type { WateringDecision } from './schema.js';
+import type { ZoneDecision } from './schema.js';
 
 // Turns the AI's answer into concrete, safe cycle times. Everything here is a pure
 // function of its inputs, so the safety rules can be unit-tested without the API.
@@ -18,7 +18,7 @@ export function planDateFor(now: Date, window: WateringWindow): string {
 }
 
 export interface GuardrailInput {
-  decision: WateringDecision;
+  decision: ZoneDecision;
   forDate: string;
   now: Date;
   lastWateredAt: string | null;
@@ -32,7 +32,7 @@ export interface GuardedPlan {
 }
 
 /**
- * Clamp the plan to the configured limits. The model is told the limits too, but this
+ * Clamp one zone's plan to the configured limits. The model is told the limits too, but this
  * is what actually holds them: cycle length, cycle count, daily total, soak time,
  * start inside the window, and a minimum gap since the last watering.
  */
@@ -99,8 +99,8 @@ export function applyGuardrails({ decision: d, forDate, now, lastWateredAt, limi
   return { cycles, adjustments };
 }
 
-/** e.g. "3 × 5 min, 30 min apart, from 5:00 AM (≈50 gal)" */
-export function describePlan(cycles: AiCycle[], gallonsPerMinute: number): string {
+/** e.g. "3 × 5 min, 30 min apart, from 5:00 AM (≈50 gal)"; no gallons while the flow rate is unknown */
+export function describePlan(cycles: AiCycle[], gallonsPerMinute: number | null): string {
   if (!cycles.length) return 'No watering.';
   const mins = cycles.map((c) => c.minutes);
   const runs = mins.every((m) => m === mins[0]) ? `${cycles.length} × ${mins[0]} min` : `${mins.join(' + ')} min`;
@@ -110,7 +110,8 @@ export function describePlan(cycles: AiCycle[], gallonsPerMinute: number): strin
     gap = `, ${Math.round(soak)} min apart`;
   }
   const first = fmtClock(new Date(cycles[0]!.startAt));
-  return `${runs}${gap}, from ${first} (≈${Math.round(sum(mins) * gallonsPerMinute)} gal)`;
+  const gal = gallonsPerMinute !== null ? ` (≈${Math.round(sum(mins) * gallonsPerMinute)} gal)` : '';
+  return `${runs}${gap}, from ${first}${gal}`;
 }
 
 const sum = (xs: number[]) => xs.reduce((a, b) => a + b, 0);

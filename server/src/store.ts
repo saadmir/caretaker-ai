@@ -11,6 +11,7 @@ export interface LogEvent {
 }
 
 export interface WateringRecord {
+  zone: number;
   start: string;
   minutes: number;
   reason: string;
@@ -28,27 +29,39 @@ export interface AiCycle {
   status: 'pending' | 'started' | 'skipped';
 }
 
+export interface ZonePlan {
+  zone: number;
+  action: 'water' | 'skip';
+  soilEstimate: string;
+  note: string; // the AI's one-liner for this zone
+  cycles: AiCycle[]; // after the guardrails; empty when skipping
+  adjustments: string[]; // what the guardrails changed
+}
+
 export interface AiDecisionRecord {
   decidedAt: string;
   forDate: string; // local date of the watering window it plans
   mode: AiMode;
-  action: 'water' | 'skip';
+  action: 'water' | 'skip'; // 'water' if any zone waters
   headline: string;
   reasoning: string;
-  soilEstimate: string;
-  cycles: AiCycle[]; // after the guardrails; empty when skipping
-  adjustments: string[]; // what the guardrails changed
+  zones: ZonePlan[];
   model: string;
   inputTokens: number;
   outputTokens: number;
 }
 
+export interface ZoneState {
+  lastWateredAt: string | null; // when the valve last opened
+  lastOffAt: string | null;
+  autoEnabled: boolean; // this zone's switch; the global autoEnabled pauses them all
+}
+
 export interface PersistedState {
   installedAt: string;
   lastRainAt: string | null;
-  lastWateredAt: string | null; // when the valve last opened
-  lastOffAt: string | null;
   autoEnabled: boolean;
+  zones: Record<string, ZoneState>; // by zone id
   events: LogEvent[];
   waterings: WateringRecord[];
   notes: Note[];
@@ -75,16 +88,15 @@ export class Store {
 
     let saved: Partial<PersistedState> | null = null;
     try {
-      saved = JSON.parse(readFileSync(this.file, 'utf8')) as Partial<PersistedState>;
+      saved = migrate(JSON.parse(readFileSync(this.file, 'utf8')) as Record<string, unknown>);
     } catch {
       // first run
     }
     this.state = {
       installedAt: new Date().toISOString(),
       lastRainAt: null,
-      lastWateredAt: null,
-      lastOffAt: null,
       autoEnabled: defaults.autoEnabled,
+      zones: {},
       events: [],
       waterings: [],
       notes: [],
@@ -95,6 +107,16 @@ export class Store {
     };
     // Files from before watering records existed: rebuild them from the activity log.
     if (saved && !saved.waterings) this.state.waterings = wateringsFromLog(this.state.events);
+    this.save();
+  }
+
+  /** A zone's own state. Zones added later start with their automatic watering off. */
+  zone(id: number): ZoneState {
+    return (this.state.zones[id] ??= { lastWateredAt: null, lastOffAt: null, autoEnabled: false });
+  }
+
+  updateZone(id: number, patch: Partial<ZoneState>): void {
+    Object.assign(this.zone(id), patch);
     this.save();
   }
 
@@ -138,7 +160,29 @@ function pushNewest<T>(list: T[], item: T, max: number): void {
   if (list.length > max) list.length = max;
 }
 
-/** Pair up "Sprinkler ON" / "Sprinkler OFF" log entries into watering records. */
+/**
+ * Bring a state file from the single-valve days up to date: its valve is zone 1,
+ * and its AI decisions become zone 1 plans.
+ */
+export function migrate(saved: Record<string, unknown>): Partial<PersistedState> {
+  const s = saved as Record<string, any>; // old shapes; fixed up below
+  if (!s.zones) {
+    s.zones = { 1: { lastWateredAt: s.lastWateredAt ?? null, lastOffAt: s.lastOffAt ?? null, autoEnabled: true } };
+    delete s.lastWateredAt;
+    delete s.lastOffAt;
+  }
+  for (const w of s.waterings ?? []) w.zone ??= 1;
+  for (const d of s.aiDecisions ?? []) {
+    if (d.zones) continue;
+    d.zones = [{ zone: 1, action: d.action, soilEstimate: d.soilEstimate, note: '', cycles: d.cycles, adjustments: d.adjustments }];
+    delete d.soilEstimate;
+    delete d.cycles;
+    delete d.adjustments;
+  }
+  return s as Partial<PersistedState>;
+}
+
+/** Pair up "Sprinkler ON" / "Sprinkler OFF" log entries into watering records (all from zone 1). */
 export function wateringsFromLog(events: LogEvent[]): WateringRecord[] {
   const out: WateringRecord[] = [];
   let on: LogEvent | null = null;
@@ -147,7 +191,7 @@ export function wateringsFromLog(events: LogEvent[]): WateringRecord[] {
     else if (ev.type === 'off' && on) {
       const minutes = (Date.parse(ev.at) - Date.parse(on.at)) / 60_000;
       const reason = /\((\w+)\)$/.exec(on.message)?.[1] ?? 'unknown';
-      out.unshift({ start: on.at, minutes: Math.round(minutes * 10) / 10, reason });
+      out.unshift({ zone: 1, start: on.at, minutes: Math.round(minutes * 10) / 10, reason });
       on = null;
     }
   }

@@ -98,7 +98,16 @@ npm test
 4. **Switch to Auto** once you trust its advice.
 
 [ai-gardener.md](ai-gardener.md) covers the details. With a flow meter connected, the
-gallon numbers are measured. Without one, set `EMITTER_COUNT` and `EMITTER_GPH` in `.env`.
+gallon numbers are measured. Without one, set each zone's `ZONE<N>_EMITTER_COUNT` and
+`ZONE<N>_EMITTER_GPH` in `.env`.
+
+## More than one valve
+
+Each valve is a zone. Wire each extra relay channel as in [hardware.md](hardware.md#adding-a-second-zone),
+list its GPIO in the firmware's `RELAY_PINS` (e.g. `{26, 25}`), and flash. On the server, set
+`ZONE_COUNT` and the new zone's `ZONE<N>_…` settings in `.env`, describe the zone in `garden.md`,
+and restart. A new zone starts with its **Auto** switch off, so nothing waters it automatically
+until you turn that on from its dashboard card.
 
 ## Access from outside the home
 

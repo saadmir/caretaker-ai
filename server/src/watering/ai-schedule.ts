@@ -2,11 +2,11 @@ import { EventEmitter } from 'node:events';
 import { aiErrorIsPermanent, aiErrorMessage, decideWatering } from '../agent/gardener.js';
 import { describePlan } from '../agent/plan.js';
 import { config } from '../config.js';
-import type { Sprinkler } from '../devices/sprinkler.js';
 import { notify } from '../integrations/bark.js';
 import type { WeatherSnapshot } from '../integrations/weather.js';
-import type { AiDecisionRecord, Store } from '../store.js';
+import type { AiDecisionRecord, Store, ZonePlan } from '../store.js';
 import { HOUR, localDate, MIN } from '../util/time.js';
+import type { Zone } from './controller.js';
 import { gallonsPerMinute } from './flow-rate.js';
 
 const RETRY_MS = 10 * MIN;
@@ -15,9 +15,9 @@ const CYCLE_STALE_MS = 2 * HOUR; // a planned cycle that can't start this late i
 
 export interface AiScheduleDeps {
   store: Store;
-  sprinkler: Sprinkler;
+  zones: Zone[];
   weather: () => WeatherSnapshot | null;
-  startRun: (minutes: number, reason: string) => void;
+  startRun: (zone: Zone, minutes: number, reason: string) => void;
 }
 
 /**
@@ -46,7 +46,13 @@ export class AiSchedule extends EventEmitter<{ change: [] }> {
     const st = this.deps.store.state;
     if (st.aiMode === 'off' || !config.ai.apiKeySet) return;
     if (this.dailyDecisionDue(now)) this.runScheduledDecision(now);
-    if (st.aiMode === 'auto' && st.autoEnabled) this.runDuePlanCycle(now);
+    if (st.aiMode !== 'auto' || !st.autoEnabled) return;
+    const d = st.aiDecisions[0];
+    if (!d || d.forDate !== localDate(now)) return;
+    for (const zone of this.deps.zones) {
+      const plan = d.zones.find((p) => p.zone === zone.id);
+      if (plan && this.deps.store.zone(zone.id).autoEnabled) this.runDuePlanCycle(now, zone, plan);
+    }
   }
 
   /** Ask for a decision now (daily schedule, or the dashboard's "Ask AI now"). */
@@ -107,11 +113,10 @@ export class AiSchedule extends EventEmitter<{ change: [] }> {
     });
   }
 
-  /** Start the next cycle of today's plan once it's due, if it's still safe to. */
-  private runDuePlanCycle(now: Date): void {
-    const { store, sprinkler } = this.deps;
-    const d = store.state.aiDecisions[0];
-    if (!d || d.forDate !== localDate(now)) return;
+  /** Start the zone's next cycle of today's plan once it's due, if it's still safe to. */
+  private runDuePlanCycle(now: Date, zone: Zone, d: ZonePlan): void {
+    const { store } = this.deps;
+    const sprinkler = zone.sprinkler;
     const i = d.cycles.findIndex((c) => c.status === 'pending');
     if (i < 0) return;
     const cycle = d.cycles[i]!;
@@ -121,8 +126,8 @@ export class AiSchedule extends EventEmitter<{ change: [] }> {
     const stopPlan = (why: string) => {
       for (const c of d.cycles) if (c.status === 'pending') c.status = 'skipped';
       store.touch();
-      store.log('skip', `AI plan stopped: ${why}`);
-      void notify('Sprinkler skipped', `Today's AI watering plan was stopped: ${why}.`, { priority: 'low' });
+      store.log('skip', `${zone.name}: AI plan stopped: ${why}`);
+      void notify('Sprinkler skipped', `${zone.name}: today's AI watering plan was stopped: ${why}.`, { priority: 'low' });
       this.emit('change');
     };
 
@@ -133,10 +138,10 @@ export class AiSchedule extends EventEmitter<{ change: [] }> {
     }
     if (this.deps.weather()?.rainingNow) return stopPlan('it is raining');
     if (i > 0 && d.cycles[i - 1]!.status !== 'started') return stopPlan('an earlier cycle did not run');
-    const last = store.state.lastWateredAt;
+    const last = store.zone(zone.id).lastWateredAt;
     if (i === 0 && last) {
       const since = now.getTime() - Date.parse(last);
-      if (since < config.ai.limits.minHoursBetweenWaterings * HOUR) {
+      if (since < zone.cfg.minHoursBetweenWaterings * HOUR) {
         return stopPlan(`already watered ${Math.round(since / HOUR)} h ago`);
       }
     }
@@ -148,27 +153,37 @@ export class AiSchedule extends EventEmitter<{ change: [] }> {
     }
     cycle.status = 'started';
     store.touch();
-    store.log('info', `AI plan: cycle ${i + 1} of ${d.cycles.length}, ${cycle.minutes} min`);
-    this.deps.startRun(cycle.minutes, 'ai');
+    store.log('info', `${zone.name}: AI plan cycle ${i + 1} of ${d.cycles.length}, ${cycle.minutes} min`);
+    this.deps.startRun(zone, cycle.minutes, 'ai');
   }
 
   private announce(d: AiDecisionRecord, trigger: string): void {
     const { store } = this.deps;
     const mode = store.state.aiMode;
-    const plan = describePlan(d.cycles, gallonsPerMinute(store.state.waterings));
-    store.log('ai', `AI (${trigger}) for ${d.forDate}: ${d.action === 'water' ? plan : 'skip'} — ${d.headline}`);
-    for (const a of d.adjustments) store.log('ai', `Guardrail: ${a}`);
+    const lines: string[] = [];
+    let anyWillWater = false;
+    for (const zone of this.deps.zones) {
+      const p = d.zones.find((z) => z.zone === zone.id);
+      if (!p) continue;
+      const plan = p.action === 'water' ? describePlan(p.cycles, gallonsPerMinute(store.state.waterings, zone.cfg)) : 'skip';
+      store.log('ai', `AI (${trigger}) for ${d.forDate}, ${zone.name}: ${plan}${p.note ? ` — ${p.note}` : ''}`);
+      for (const a of p.adjustments) store.log('ai', `Guardrail (${zone.name}): ${a}`);
 
-    const willWater = mode === 'auto' && store.state.autoEnabled;
-    let footer = '';
-    if (d.action === 'water') {
-      footer = willWater
-        ? `\n\nPlan: ${plan}.`
-        : `\n\nSuggested: ${plan}. Not watering automatically (${mode === 'auto' ? 'automatic watering is paused' : `${mode} mode`}).`;
+      let why = '';
+      if (p.action === 'water') {
+        const willWater = mode === 'auto' && store.state.autoEnabled && store.zone(zone.id).autoEnabled;
+        anyWillWater ||= willWater;
+        if (!willWater) {
+          why = mode !== 'auto' ? `${mode} mode` : !store.state.autoEnabled ? 'automatic watering is paused' : 'automatic watering is off for this zone';
+          why = ` (suggested only: ${why})`;
+        }
+      }
+      const adjusted = p.adjustments.length ? ` Adjusted by limits: ${p.adjustments.join(' ')}` : '';
+      lines.push(`${zone.name}: ${plan}${why}.${adjusted}`);
     }
-    const adjusted = d.adjustments.length ? `\n\nAdjusted by limits: ${d.adjustments.join(' ')}` : '';
-    void notify(`AI: ${d.headline}`, `${d.reasoning}${footer}${adjusted}`, {
-      priority: d.action === 'water' && willWater ? 'default' : 'low',
+    store.log('ai', `AI headline: ${d.headline}`);
+    void notify(`AI: ${d.headline}`, `${d.reasoning}\n\n${lines.join('\n')}`, {
+      priority: anyWillWater ? 'default' : 'low',
     });
   }
 }

@@ -5,8 +5,9 @@ import type { Store } from '../store.js';
 import { fmtDuration, MIN } from '../util/time.js';
 
 /**
- * Things worth waking the owner for: the controller going offline, the valve running
+ * Things worth waking the owner for: the controller going offline, a valve running
  * long, water flowing past a closed valve, or no water with the valve open.
+ * There's one Alerts per zone; only the one with `watchOnline` reports the board going offline.
  * check() runs on every controller tick; each alert fires once until its cause clears.
  */
 export class Alerts {
@@ -20,10 +21,12 @@ export class Alerts {
   constructor(
     private readonly sprinkler: Sprinkler,
     private readonly store: Store,
+    private readonly zoneName: string,
+    private readonly watchOnline: boolean,
   ) {}
 
   check(now: number): void {
-    this.checkOffline(now);
+    if (this.watchOnline) this.checkOffline(now);
     this.checkLongRun(now);
     this.checkLeak(now);
     this.checkNoFlow(now);
@@ -65,10 +68,10 @@ export class Alerts {
     const repeatDue = !this.longRunAlertedAt || now - this.longRunAlertedAt >= config.alerts.longRunRepeatMinutes * MIN;
     if (onFor <= limit + grace || !repeatDue) return;
     this.longRunAlertedAt = now;
-    this.store.log('alert', `Sprinkler has been ON for ${fmtDuration(onFor)}`);
+    this.store.log('alert', `${this.zoneName} has been ON for ${fmtDuration(onFor)}`);
     void notify(
-      'Sprinkler running long',
-      `The sprinkler has been on for ${fmtDuration(onFor)} (limit ${config.alerts.longRunMinutes} min). ` +
+      `${this.zoneName} running long`,
+      `${this.zoneName} has been on for ${fmtDuration(onFor)} (limit ${config.alerts.longRunMinutes} min). ` +
         `Turn it off from the dashboard if this is not intended.`,
       { priority: 'urgent' },
     );
@@ -79,22 +82,23 @@ export class Alerts {
     const s = this.sprinkler.status;
     const f = config.flow;
     if (!s.online || s.flowGpm === null) return;
-    const offAt = this.store.state.lastOffAt ? Date.parse(this.store.state.lastOffAt) : 0;
+    const lastOff = this.store.zone(this.sprinkler.zone).lastOffAt;
+    const offAt = lastOff ? Date.parse(lastOff) : 0;
     const drained = now - offAt > MIN; // lines keep draining for a bit after the valve closes
 
     if (s.valve === 'off' && drained && s.flowGpm >= f.leakGpm) {
       this.flowWhileOffSince ??= now;
       if (this.leakAlerted || now - this.flowWhileOffSince < f.leakMinutes * MIN) return;
       this.leakAlerted = true;
-      this.store.log('alert', `Water flowing with the valve closed: ${s.flowGpm} gal/min`);
+      this.store.log('alert', `${this.zoneName}: water flowing with the valve closed: ${s.flowGpm} gal/min`);
       void notify(
-        'Water flowing with valve closed',
+        `${this.zoneName}: water flowing with valve closed`,
         `The flow meter reads ${s.flowGpm} gal/min although the valve is off. The valve may be stuck open ` +
           `(debris in the diaphragm) or a line is leaking. Close the supply valve and check it.`,
         { priority: 'urgent' },
       );
     } else if (s.valve !== 'on') {
-      if (this.leakAlerted) this.store.log('info', 'Flow with valve closed has stopped');
+      if (this.leakAlerted) this.store.log('info', `${this.zoneName}: flow with valve closed has stopped`);
       this.flowWhileOffSince = null;
       this.leakAlerted = false;
     }
@@ -107,9 +111,9 @@ export class Alerts {
     const openFor = now - Date.parse(s.onSince);
     if (openFor < f.noFlowSeconds * 1000 || s.flowGpm >= f.noFlowGpm) return;
     this.noFlowAlerted = true;
-    this.store.log('alert', 'Valve is open but no water is flowing');
+    this.store.log('alert', `${this.zoneName}: valve is open but no water is flowing`);
     void notify(
-      'No water flowing',
+      `${this.zoneName}: no water flowing`,
       `The valve has been open for ${fmtDuration(openFor)} but the flow meter reads ${s.flowGpm} gal/min. ` +
         `Check the supply valve, the 24 VAC transformer and the flow sensor wiring.`,
       { priority: 'high' },

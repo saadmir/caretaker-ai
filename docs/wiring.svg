@@ -1,82 +1,143 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 600" font-family="system-ui, -apple-system, Segoe UI, Roboto, sans-serif" font-size="14">
-  <rect width="960" height="600" fill="#ffffff"/>
-  <text x="30" y="38" font-size="20" font-weight="700" fill="#0f172a">Sprinkler controller wiring: ESP32 → SRD-05VDC-SL-C relay module → 24 VAC valve</text>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 860" font-family="system-ui, -apple-system, Segoe UI, Roboto, sans-serif" font-size="14">
+  <rect width="1200" height="860" fill="#ffffff"/>
+  <text x="30" y="40" font-size="20" font-weight="700" fill="#0f172a">Caretaker AI wiring: ESP32 → 4-channel relay → two 24 VAC valves, flow meter on Zone 1</text>
 
-  <!-- zones -->
-  <rect x="20" y="70" width="560" height="440" rx="14" fill="#f1f5f9"/>
+  <!-- panels -->
+  <rect x="20" y="70" width="600" height="500" rx="14" fill="#f1f5f9"/>
   <text x="36" y="94" font-size="12" font-weight="700" fill="#475569" letter-spacing="1">5 V DC LOGIC SIDE</text>
-  <rect x="590" y="70" width="350" height="440" rx="14" fill="#eff6ff"/>
-  <text x="606" y="94" font-size="12" font-weight="700" fill="#1d4ed8" letter-spacing="1">24 VAC VALVE SIDE (isolated)</text>
+  <rect x="630" y="70" width="550" height="500" rx="14" fill="#eff6ff"/>
+  <text x="646" y="94" font-size="12" font-weight="700" fill="#1d4ed8" letter-spacing="1">24 VAC VALVE SIDE (isolated)</text>
+  <rect x="20" y="590" width="1160" height="200" rx="14" fill="#f0fdf4"/>
+  <text x="36" y="614" font-size="12" font-weight="700" fill="#15803d" letter-spacing="1">PLUMBING (water path)</text>
 
   <!-- ESP32 -->
-  <rect x="40" y="140" width="200" height="240" rx="10" fill="#1e293b"/>
-  <text x="140" y="172" fill="#fff" font-weight="700" text-anchor="middle">ESP32 DevKit</text>
-  <text x="140" y="190" fill="#94a3b8" font-size="12" text-anchor="middle">ESP-WROOM-32</text>
+  <rect x="40" y="110" width="200" height="360" rx="10" fill="#1e293b"/>
+  <text x="140" y="140" fill="#fff" font-weight="700" text-anchor="middle">ESP32 DevKit</text>
+  <text x="140" y="158" fill="#94a3b8" font-size="12" text-anchor="middle">on screw-terminal breakout</text>
+  <text x="140" y="174" fill="#94a3b8" font-size="11" text-anchor="middle">signals on each GPIO's S pin</text>
   <g fill="#e2e8f0" font-size="13" text-anchor="end">
-    <text x="228" y="205">VIN (5V)</text>
-    <text x="228" y="255">GND</text>
-    <text x="228" y="305">GPIO 26 (D26)</text>
+    <text x="228" y="205">GND</text>
+    <text x="228" y="250">D26 · S</text>
+    <text x="228" y="295">D25 · S</text>
+    <text x="228" y="385">5V (left side)</text>
+    <text x="228" y="425">D27 · S</text>
+    <text x="228" y="460">GND</text>
   </g>
-  <g fill="#fbbf24"><circle cx="240" cy="200" r="5"/><circle cx="240" cy="250" r="5"/><circle cx="240" cy="300" r="5"/></g>
-  <rect x="120" y="372" width="40" height="16" rx="3" fill="#64748b"/>
-  <line x1="140" y1="388" x2="140" y2="440" stroke="#0f172a" stroke-width="4"/>
-  <rect x="85" y="440" width="110" height="44" rx="8" fill="#fff" stroke="#0f172a" stroke-width="2"/>
-  <text x="140" y="460" text-anchor="middle" font-size="12" font-weight="700">USB 5 V charger</text>
-  <text x="140" y="476" text-anchor="middle" font-size="11" fill="#475569">≥1 A, micro-USB</text>
+  <g fill="#fbbf24"><circle cx="240" cy="200" r="5"/><circle cx="240" cy="245" r="5"/><circle cx="240" cy="290" r="5"/><circle cx="240" cy="380" r="5"/><circle cx="240" cy="420" r="5"/><circle cx="240" cy="455" r="5"/></g>
+  <line x1="140" y1="470" x2="140" y2="500" stroke="#0f172a" stroke-width="4"/>
+  <rect x="75" y="500" width="130" height="44" rx="8" fill="#fff" stroke="#0f172a" stroke-width="2"/>
+  <text x="140" y="519" text-anchor="middle" font-size="12" font-weight="700">USB 5 V charger</text>
+  <text x="140" y="535" text-anchor="middle" font-size="11" fill="#475569">≥1 A</text>
 
-  <!-- Relay module -->
-  <rect x="360" y="140" width="200" height="240" rx="10" fill="#1d4ed8"/>
-  <text x="460" y="172" fill="#fff" font-weight="700" text-anchor="middle">1-ch relay module</text>
-  <text x="460" y="190" fill="#bfdbfe" font-size="12" text-anchor="middle">SRD-05VDC-SL-C</text>
+  <!-- Relay board -->
+  <rect x="360" y="110" width="220" height="300" rx="10" fill="#1d4ed8"/>
+  <text x="470" y="140" fill="#fff" font-weight="700" text-anchor="middle">4-channel relay board</text>
+  <text x="470" y="158" fill="#bfdbfe" font-size="12" text-anchor="middle">opto, active-low, JD-VCC jumper on</text>
   <g fill="#fff" font-size="13">
-    <text x="372" y="205">VCC / DC+</text>
-    <text x="372" y="255">GND / DC−</text>
-    <text x="372" y="305">IN</text>
+    <text x="372" y="205">GND</text>
+    <text x="372" y="250">IN1</text>
+    <text x="372" y="295">IN2</text>
+    <text x="372" y="325" fill="#93c5fd">IN3 (spare)</text>
+    <text x="372" y="355" fill="#93c5fd">IN4 (spare)</text>
+    <text x="372" y="385">VCC</text>
   </g>
-  <g fill="#fff" font-size="13" text-anchor="end">
-    <text x="548" y="205">NO</text>
-    <text x="548" y="265">COM</text>
-    <text x="548" y="325">NC</text>
+  <g fill="#fff" font-size="12" text-anchor="end">
+    <text x="568" y="194">K1 NO</text><text x="568" y="219">K1 COM</text><text x="568" y="244" fill="#93c5fd">K1 NC</text>
+    <text x="568" y="294">K2 NO</text><text x="568" y="319">K2 COM</text><text x="568" y="344" fill="#93c5fd">K2 NC</text>
+    <text x="568" y="390" fill="#93c5fd">K3, K4 spare</text>
   </g>
-  <g fill="#fbbf24"><circle cx="360" cy="200" r="5"/><circle cx="360" cy="250" r="5"/><circle cx="360" cy="300" r="5"/></g>
-  <g fill="#e2e8f0" stroke="#0f172a"><circle cx="560" cy="200" r="6"/><circle cx="560" cy="260" r="6"/><circle cx="560" cy="320" r="6"/></g>
-  <text x="548" y="345" font-size="11" fill="#bfdbfe" text-anchor="end">(unused)</text>
+  <g fill="#fbbf24"><circle cx="360" cy="200" r="5"/><circle cx="360" cy="245" r="5"/><circle cx="360" cy="290" r="5"/><circle cx="360" cy="380" r="5"/></g>
+  <g fill="#93c5fd"><circle cx="360" cy="320" r="4"/><circle cx="360" cy="350" r="4"/></g>
+  <g fill="#e2e8f0" stroke="#0f172a"><circle cx="580" cy="190" r="6"/><circle cx="580" cy="215" r="6"/><circle cx="580" cy="290" r="6"/><circle cx="580" cy="315" r="6"/></g>
+  <g fill="#1d4ed8" stroke="#93c5fd"><circle cx="580" cy="240" r="5"/><circle cx="580" cy="340" r="5"/></g>
 
   <!-- logic wires -->
-  <line x1="245" y1="200" x2="355" y2="200" stroke="#dc2626" stroke-width="4"/>
-  <line x1="245" y1="250" x2="355" y2="250" stroke="#0f172a" stroke-width="4"/>
-  <line x1="245" y1="300" x2="355" y2="300" stroke="#f59e0b" stroke-width="4"/>
+  <line x1="245" y1="200" x2="355" y2="200" stroke="#0f172a" stroke-width="4"/>
+  <line x1="245" y1="245" x2="355" y2="245" stroke="#ea580c" stroke-width="4"/>
+  <line x1="245" y1="290" x2="355" y2="290" stroke="#0891b2" stroke-width="4"/>
+  <line x1="245" y1="380" x2="355" y2="380" stroke="#dc2626" stroke-width="4"/>
   <g font-size="11" fill="#475569" text-anchor="middle">
-    <text x="300" y="192">red</text><text x="300" y="242">black</text><text x="300" y="292">signal</text>
+    <text x="300" y="192">ground</text><text x="300" y="237">Zone 1 signal</text><text x="300" y="282">Zone 2 signal</text><text x="300" y="372">5 V</text>
   </g>
 
-  <!-- Valve -->
-  <rect x="680" y="150" width="180" height="110" rx="10" fill="#fff" stroke="#0f172a" stroke-width="2"/>
-  <text x="770" y="185" text-anchor="middle" font-weight="700">Sprinkler valve</text>
-  <text x="770" y="204" text-anchor="middle" font-size="12" fill="#475569">24 VAC solenoid</text>
-  <text x="770" y="222" text-anchor="middle" font-size="12" fill="#475569">(2 wires, either way)</text>
-  <circle cx="680" cy="200" r="5" fill="#0f172a"/><circle cx="860" cy="230" r="5" fill="#0f172a"/>
+  <!-- flow sensor wires: red shares the 5V pin, yellow through the diode, black to a GND pin -->
+  <circle cx="330" cy="380" r="6" fill="#dc2626"/>
+  <line x1="330" y1="380" x2="330" y2="645" stroke="#dc2626" stroke-width="4"/>
+  <polyline points="245,420 300,420 300,645" fill="none" stroke="#eab308" stroke-width="4"/>
+  <polyline points="245,455 270,455 270,645" fill="none" stroke="#0f172a" stroke-width="4"/>
+  <polygon points="289,500 311,500 300,522" fill="#0f172a"/>
+  <line x1="288" y1="525" x2="312" y2="525" stroke="#0f172a" stroke-width="5"/>
+  <g font-size="11" fill="#334155">
+    <text x="344" y="455">optional 10 kΩ from D27 to 3V3</text>
+    <text x="344" y="470">(only for a long sensor cable)</text>
+    <text x="344" y="508" font-weight="700">Schottky diode</text>
+    <text x="344" y="523">stripe (cathode) toward the sensor</text>
+    <text x="344" y="538">never wire yellow straight to D27</text>
+  </g>
 
-  <!-- Transformer -->
-  <rect x="680" y="350" width="180" height="110" rx="10" fill="#fff" stroke="#0f172a" stroke-width="2"/>
-  <text x="770" y="385" text-anchor="middle" font-weight="700">24 VAC transformer</text>
-  <text x="770" y="404" text-anchor="middle" font-size="12" fill="#475569">plug-in, ≥ 0.75 A / 18 VA</text>
-  <text x="770" y="422" text-anchor="middle" font-size="12" fill="#475569">AC output — not DC</text>
-  <circle cx="680" cy="400" r="5" fill="#0f172a"/><circle cx="860" cy="420" r="5" fill="#0f172a"/>
-  <text x="692" y="448" font-size="11" fill="#475569">A</text><text x="842" y="448" font-size="11" fill="#475569">B</text>
-  <line x1="770" y1="460" x2="770" y2="530" stroke="#0f172a" stroke-width="3"/>
-  <text x="770" y="550" text-anchor="middle" font-size="12" font-weight="700">120 V wall outlet</text>
-  <text x="770" y="566" text-anchor="middle" font-size="11" fill="#475569">(no mains wiring needed)</text>
+  <!-- Valves and transformer -->
+  <rect x="780" y="160" width="180" height="70" rx="10" fill="#fff" stroke="#0f172a" stroke-width="2"/>
+  <text x="870" y="190" text-anchor="middle" font-weight="700">Valve 1 · Zone 1</text>
+  <text x="870" y="208" text-anchor="middle" font-size="12" fill="#475569">24 VAC solenoid, 2 wires</text>
+  <circle cx="780" cy="190" r="5" fill="#0f172a"/><circle cx="960" cy="215" r="5" fill="#0f172a"/>
 
-  <!-- 24VAC wires -->
-  <line x1="566" y1="200" x2="675" y2="200" stroke="#2563eb" stroke-width="4"/>
-  <polyline points="566,260 620,260 620,400 675,400" fill="none" stroke="#2563eb" stroke-width="4"/>
-  <rect x="608" y="280" width="24" height="44" rx="4" fill="#fff" stroke="#0f172a" stroke-width="2"/>
-  <text x="640" y="298" font-size="11" fill="#475569">1 A fuse</text>
-  <text x="640" y="312" font-size="11" fill="#475569">(optional)</text>
-  <polyline points="865,420 905,420 905,230 865,230" fill="none" stroke="#7c3aed" stroke-width="4"/>
-  <text x="912" y="330" font-size="11" fill="#475569" transform="rotate(90 912 330)" text-anchor="middle">valve common</text>
+  <rect x="780" y="260" width="180" height="70" rx="10" fill="#fff" stroke="#0f172a" stroke-width="2"/>
+  <text x="870" y="290" text-anchor="middle" font-weight="700">Valve 2 · Zone 2</text>
+  <text x="870" y="308" text-anchor="middle" font-size="12" fill="#475569">24 VAC solenoid, 2 wires</text>
+  <circle cx="780" cy="290" r="5" fill="#0f172a"/><circle cx="960" cy="315" r="5" fill="#0f172a"/>
 
-  <text x="30" y="535" font-size="12" fill="#334155">Relay is a switch only: it does NOT convert voltage. The transformer makes 24 VAC; the relay connects it to the valve.</text>
-  <text x="30" y="553" font-size="12" fill="#334155">Never connect any 24 VAC wire to the ESP32. The relay contacts are the only link between the two sides.</text>
+  <rect x="780" y="420" width="180" height="80" rx="10" fill="#fff" stroke="#0f172a" stroke-width="2"/>
+  <text x="870" y="448" text-anchor="middle" font-weight="700">24 VAC transformer</text>
+  <text x="870" y="466" text-anchor="middle" font-size="12" fill="#475569">≥ 0.75 A, AC output</text>
+  <circle cx="780" cy="450" r="5" fill="#0f172a"/><circle cx="960" cy="470" r="5" fill="#0f172a"/>
+  <text x="790" y="492" font-size="11" fill="#475569">A</text><text x="943" y="492" font-size="11" fill="#475569">B</text>
+  <line x1="870" y1="500" x2="870" y2="530" stroke="#0f172a" stroke-width="3"/>
+  <text x="870" y="548" text-anchor="middle" font-size="12" font-weight="700">120 V wall outlet</text>
+
+  <!-- 24 VAC wires -->
+  <line x1="586" y1="190" x2="775" y2="190" stroke="#2563eb" stroke-width="4"/>
+  <path d="M586,290 H642 a8,8 0 0 1 16,0 H775" fill="none" stroke="#2563eb" stroke-width="4"/>
+  <line x1="586" y1="215" x2="650" y2="215" stroke="#2563eb" stroke-width="4"/>
+  <line x1="586" y1="315" x2="650" y2="315" stroke="#2563eb" stroke-width="4"/>
+  <polyline points="650,215 650,450 775,450" fill="none" stroke="#2563eb" stroke-width="4"/>
+  <circle cx="650" cy="315" r="5" fill="#2563eb"/>
+  <rect x="638" y="365" width="24" height="40" rx="4" fill="#fff" stroke="#0f172a" stroke-width="2"/>
+  <g font-size="11" fill="#475569">
+    <text x="668" y="246">COM1–COM2 jumper</text>
+    <text x="668" y="380">1 A fuse</text><text x="668" y="394">(optional)</text>
+    <text x="690" y="182">to valve 1</text>
+    <text x="690" y="282">to valve 2</text>
+  </g>
+  <polyline points="965,215 1030,215 1030,470 965,470" fill="none" stroke="#7c3aed" stroke-width="4"/>
+  <line x1="965" y1="315" x2="1030" y2="315" stroke="#7c3aed" stroke-width="4"/>
+  <circle cx="1030" cy="315" r="5" fill="#7c3aed"/>
+  <text x="1046" y="340" font-size="11" fill="#475569" transform="rotate(90 1046 340)" text-anchor="middle">shared valve common (B)</text>
+
+  <!-- Plumbing: Zone 1 -->
+  <text x="40" y="662" font-size="12" font-weight="700">Supply 1</text>
+  <text x="40" y="677" font-size="11" fill="#475569">house water</text>
+  <line x1="125" y1="670" x2="1140" y2="670" stroke="#38bdf8" stroke-width="10"/>
+  <polygon points="1140,658 1162,670 1140,682" fill="#38bdf8"/>
+  <rect x="140" y="650" width="80" height="40" rx="6" fill="#fff" stroke="#0f172a" stroke-width="2"/>
+  <text x="180" y="675" text-anchor="middle" font-size="12" font-weight="700">Valve 1</text>
+  <rect x="250" y="645" width="100" height="50" rx="6" fill="#1e293b"/>
+  <text x="300" y="666" fill="#fff" text-anchor="middle" font-size="12" font-weight="700">FS400A</text>
+  <text x="300" y="684" fill="#94a3b8" text-anchor="middle" font-size="11">flow meter →</text>
+  <g fill="#fbbf24"><circle cx="270" cy="645" r="4"/><circle cx="300" cy="645" r="4"/><circle cx="330" cy="645" r="4"/></g>
+  <g font-size="10" fill="#475569" text-anchor="middle"><text x="262" y="636">blk</text><text x="300" y="636">yel</text><text x="340" y="636">red</text></g>
+  <text x="380" y="655" font-size="12" font-weight="700">Zone 1 drip: succulent slope, half under pines · 2 × 75 ft lines, ~40 emitters</text>
+  <text x="380" y="695" font-size="11" fill="#475569">Meter on the valve OUTLET, arrow on its body pointing with the flow</text>
+
+  <!-- Plumbing: Zone 2 -->
+  <text x="40" y="742" font-size="12" font-weight="700">Supply 2</text>
+  <text x="40" y="757" font-size="11" fill="#475569">own supply</text>
+  <line x1="125" y1="750" x2="1140" y2="750" stroke="#38bdf8" stroke-width="10"/>
+  <polygon points="1140,738 1162,750 1140,762" fill="#38bdf8"/>
+  <rect x="140" y="730" width="80" height="40" rx="6" fill="#fff" stroke="#0f172a" stroke-width="2"/>
+  <text x="180" y="755" text-anchor="middle" font-size="12" font-weight="700">Valve 2</text>
+  <text x="250" y="735" font-size="12" font-weight="700">Zone 2 drip: full sun, south · succulents, perennials, Arabian jasmine (own emitter), porch pots</text>
+  <text x="250" y="775" font-size="11" fill="#475569">No flow meter · emitters not installed yet</text>
+
+  <text x="30" y="818" font-size="12" fill="#334155">Breakout board: each GPIO has G / S / V pins, and signal wires go on S. Relay VCC and the sensor's red wire go on the left-side 5V pin, not 3.3 V.</text>
+  <text x="30" y="838" font-size="12" fill="#334155">Relay terminals are unlabeled: COM is the middle screw, NO is the outer one that is open at rest (a valve on NC runs constantly). Never connect 24 VAC to the ESP32.</text>
 </svg>

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { applyGuardrails, describePlan, planDateFor } from '../src/agent/plan.js';
-import type { WateringDecision } from '../src/agent/schema.js';
+import type { ZoneDecision } from '../src/agent/schema.js';
 
 const limits = {
   maxMinutesPerDay: 30,
@@ -15,15 +15,15 @@ const window = { startHour: 5, endHour: 9 };
 const day = '2026-10-19';
 const at = (local: string) => new Date(`${day}T${local}:00`);
 
-function plan(d: Partial<WateringDecision>, opts: { now?: Date; lastWateredAt?: string | null } = {}) {
-  const decision: WateringDecision = {
+function plan(d: Partial<ZoneDecision>, opts: { now?: Date; lastWateredAt?: string | null } = {}) {
+  const decision: ZoneDecision = {
+    zone: 1,
     action: 'water',
     start_time: '05:00',
     cycle_minutes: [10],
     soak_minutes_between_cycles: 0,
     soil_estimate: 'dry',
-    headline: '',
-    reasoning: '',
+    note: '',
     ...d,
   };
   return applyGuardrails({
@@ -91,5 +91,9 @@ describe('describePlan', () => {
   it('summarizes cycles, soak and gallons', () => {
     const r = plan({ cycle_minutes: [5, 5, 5], soak_minutes_between_cycles: 30 });
     assert.equal(describePlan(r.cycles, 3), '3 × 5 min, 30 min apart, from 5:00 AM (≈45 gal)');
+  });
+
+  it('leaves out gallons while the flow rate is unknown', () => {
+    assert.equal(describePlan(plan({}).cycles, null), '1 × 10 min, from 5:00 AM');
   });
 });

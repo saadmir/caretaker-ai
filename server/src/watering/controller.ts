@@ -1,5 +1,5 @@
 import { EventEmitter } from 'node:events';
-import { config, type AiMode } from '../config.js';
+import { config, type AiMode, type ZoneConfig } from '../config.js';
 import type { Sprinkler, SprinklerStatus, ValveState } from '../devices/sprinkler.js';
 import { notify } from '../integrations/bark.js';
 import { fetchWeather, type WeatherSnapshot } from '../integrations/weather.js';
@@ -13,42 +13,67 @@ const TICK_MS = 15_000;
 const WEATHER_RETRY_MS = MIN;
 const SKIP_NOTICE_EVERY_MS = 12 * HOUR;
 
+/** One valve: its settings, its device, and the controller's bookkeeping for it. */
+export class Zone {
+  dryRule: DryRuleStatus | null = null;
+  readonly alerts: Alerts;
+  lastSkipNoticeAt = 0;
+  pendingReason: string | null = null; // reason of a command not yet confirmed by the ESP32
+  runReason: string | null = null; // why the valve opened, for the record written when it closes
+
+  constructor(
+    readonly cfg: ZoneConfig,
+    readonly sprinkler: Sprinkler,
+    store: Store,
+    watchOnline: boolean,
+  ) {
+    this.alerts = new Alerts(sprinkler, store, cfg.name, watchOnline);
+  }
+
+  get id(): number {
+    return this.cfg.id;
+  }
+
+  get name(): string {
+    return this.cfg.name;
+  }
+}
+
 /**
  * Owns the watering side of the house: polls the weather, runs the plain dry rule
- * and the AI schedule every 15 s, handles dashboard commands, and turns the
- * ESP32's valve reports into log entries, watering records and notifications.
+ * for each zone and the AI schedule every 15 s, handles dashboard commands, and turns
+ * the ESP32's valve reports into log entries, watering records and notifications.
  */
 export class WateringController extends EventEmitter<{ change: [] }> {
   weather: WeatherSnapshot | null = null;
   weatherError: string | null = null;
-  dryRule: DryRuleStatus | null = null;
+  readonly zones: Zone[];
   readonly ai: AiSchedule;
 
-  private readonly alerts: Alerts;
   private timers: NodeJS.Timeout[] = [];
   private weatherRetry: NodeJS.Timeout | null = null;
-  private lastSkipNoticeAt = 0;
-  private pendingReason: string | null = null; // reason of a command not yet confirmed by the ESP32
-  private runReason: string | null = null; // why the valve opened, for the record written when it closes
 
   constructor(
-    private readonly sprinkler: Sprinkler,
+    sprinklers: Sprinkler[],
     private readonly store: Store,
   ) {
     super();
-    this.alerts = new Alerts(sprinkler, store);
+    // All zones are valves on the same ESP32, so the first one speaks for the board's online state.
+    this.zones = sprinklers.map((s, i) => new Zone(config.zones[i]!, s, store, i === 0));
     this.ai = new AiSchedule({
       store,
-      sprinkler,
+      zones: this.zones,
       weather: () => this.weather,
-      startRun: (minutes, reason) => this.startRun(minutes, reason),
+      startRun: (zone, minutes, reason) => this.startRun(zone, minutes, reason),
     });
   }
 
   start(): void {
-    this.sprinkler.on('valve', (next, prev, status) => void this.onValveChange(next, prev, status));
-    this.sprinkler.on('online', (online) => void this.onOnlineChange(online));
-    this.sprinkler.on('update', () => this.emit('change'));
+    for (const z of this.zones) {
+      z.sprinkler.on('valve', (next, prev, status) => void this.onValveChange(z, next, prev, status));
+      z.sprinkler.on('update', () => this.emit('change'));
+    }
+    this.zones[0]!.sprinkler.on('online', (online) => void this.onOnlineChange(online));
     this.ai.on('change', () => this.changed());
 
     void this.refreshWeather();
@@ -61,22 +86,37 @@ export class WateringController extends EventEmitter<{ change: [] }> {
     if (this.weatherRetry) clearTimeout(this.weatherRetry);
   }
 
-  // Dashboard commands
-
-  manualOn(minutes: number): void {
-    this.requireOnline();
-    this.startRun(minutes, 'manual'); // 0 = until turned off (the firmware failsafe still caps it)
+  zone(id: number): Zone {
+    const z = this.zones.find((z) => z.id === id);
+    if (!z) throw new Error(`No zone ${id}`);
+    return z;
   }
 
-  manualOff(): void {
-    this.requireOnline();
-    this.pendingReason = 'manual';
-    this.sprinkler.turnOff('manual');
+  // Dashboard commands
+
+  manualOn(zoneId: number, minutes: number): void {
+    const z = this.zone(zoneId);
+    this.requireOnline(z);
+    this.startRun(z, minutes, 'manual'); // 0 = until turned off (the firmware failsafe still caps it)
+  }
+
+  manualOff(zoneId: number): void {
+    const z = this.zone(zoneId);
+    this.requireOnline(z);
+    z.pendingReason = 'manual';
+    z.sprinkler.turnOff('manual');
   }
 
   setAutoEnabled(enabled: boolean): void {
     this.store.update({ autoEnabled: enabled });
     this.store.log('info', `Automatic watering ${enabled ? 'enabled' : 'paused'}`);
+    this.changed();
+  }
+
+  setZoneAutoEnabled(zoneId: number, enabled: boolean): void {
+    const z = this.zone(zoneId);
+    this.store.updateZone(z.id, { autoEnabled: enabled });
+    this.store.log('info', `Automatic watering ${enabled ? 'enabled' : 'turned off'} for ${z.name}`);
     this.changed();
   }
 
@@ -111,8 +151,10 @@ export class WateringController extends EventEmitter<{ change: [] }> {
 
   private tick(): void {
     const now = Date.now();
-    this.sprinkler.checkHeartbeat(now);
-    this.alerts.check(now);
+    for (const z of this.zones) {
+      z.sprinkler.checkHeartbeat(now);
+      z.alerts.check(now);
+    }
     this.evaluateDryRule();
     this.ai.tick(new Date(now));
   }
@@ -123,13 +165,13 @@ export class WateringController extends EventEmitter<{ change: [] }> {
     this.emit('change');
   }
 
-  private startRun(minutes: number, reason: string): void {
-    this.pendingReason = reason;
-    this.sprinkler.turnOn(minutes * 60, reason);
+  private startRun(z: Zone, minutes: number, reason: string): void {
+    z.pendingReason = reason;
+    z.sprinkler.turnOn(minutes * 60, reason);
   }
 
-  private requireOnline(): void {
-    if (!this.sprinkler.status.online) throw new Error('Sprinkler controller (ESP32) is offline');
+  private requireOnline(z: Zone): void {
+    if (!z.sprinkler.status.online) throw new Error('Sprinkler controller (ESP32) is offline');
   }
 
   /** Remember the latest rain: either the model shows a wet hour, or it's raining right now. */
@@ -145,75 +187,80 @@ export class WateringController extends EventEmitter<{ change: [] }> {
 
   private evaluateDryRule(): void {
     const now = new Date();
-    const s = this.sprinkler.status;
-    const rule = checkDryRule({
-      now,
-      state: this.store.state,
-      weather: this.weather,
-      valveOn: s.valve === 'on',
-      online: s.online,
-      aiInCharge: this.ai.inCharge(now),
-      config,
-    });
-    this.dryRule = rule;
+    const aiInCharge = this.ai.inCharge(now);
+    for (const z of this.zones) {
+      const s = z.sprinkler.status;
+      const rule = checkDryRule({
+        now,
+        state: this.store.state,
+        zone: this.store.zone(z.id),
+        weather: this.weather,
+        valveOn: s.valve === 'on',
+        online: s.online,
+        aiInCharge,
+        config,
+      });
+      z.dryRule = rule;
 
-    if (rule.blockedByWeather && now.getTime() - this.lastSkipNoticeAt > SKIP_NOTICE_EVERY_MS) {
-      this.lastSkipNoticeAt = now.getTime();
-      this.store.log('skip', `Watering due but skipped: ${rule.blockedBy}`);
-      void notify('Sprinkler skipped', `Watering is due but skipped: ${rule.blockedBy}.`, { priority: 'low' });
+      if (rule.blockedByWeather && now.getTime() - z.lastSkipNoticeAt > SKIP_NOTICE_EVERY_MS) {
+        z.lastSkipNoticeAt = now.getTime();
+        this.store.log('skip', `${z.name}: watering due but skipped: ${rule.blockedBy}`);
+        void notify('Sprinkler skipped', `${z.name}: watering is due but skipped: ${rule.blockedBy}.`, { priority: 'low' });
+      }
+      if (!shouldRunNow(rule)) continue;
+
+      this.store.log('info', `${z.name}: starting automatic run, ${Math.round(rule.hoursDry)} h since last rain/watering`);
+      this.startRun(z, config.schedule.autoRunMinutes, 'auto');
+      // Count it as watered now, so the rule can't fire again before the ESP32 confirms.
+      this.store.updateZone(z.id, { lastWateredAt: now.toISOString() });
     }
-    if (!shouldRunNow(rule)) return;
-
-    this.store.log('info', `Starting automatic run: ${Math.round(rule.hoursDry)} h since last rain/watering`);
-    this.startRun(config.schedule.autoRunMinutes, 'auto');
-    // Count it as watered now, so the rule can't fire again before the ESP32 confirms.
-    this.store.update({ lastWateredAt: now.toISOString() });
   }
 
-  private async onValveChange(next: ValveState, prev: ValveState, s: SprinklerStatus): Promise<void> {
-    const reason = s.reason ?? this.pendingReason ?? 'unknown';
-    this.pendingReason = null;
-    this.alerts.onValveChange();
+  private async onValveChange(z: Zone, next: ValveState, prev: ValveState, s: SprinklerStatus): Promise<void> {
+    const reason = s.reason ?? z.pendingReason ?? 'unknown';
+    z.pendingReason = null;
+    z.alerts.onValveChange();
 
     if (next === 'on') {
-      this.runReason = reason;
-      this.store.update({ lastWateredAt: s.onSince ?? new Date().toISOString() });
-      this.store.log('on', `Sprinkler ON (${reason})`);
+      z.runReason = reason;
+      this.store.updateZone(z.id, { lastWateredAt: s.onSince ?? new Date().toISOString() });
+      this.store.log('on', `${z.name} ON (${reason})`);
       const detail = describeRun(reason, s.remainingSec);
-      await notify('Sprinkler ON', prev === 'unknown' ? `Detected ON at startup. ${detail}` : `${label(reason)}. ${detail}`);
+      await notify(`${z.name} ON`, prev === 'unknown' ? `Detected ON at startup. ${detail}` : `${label(reason)}. ${detail}`);
     } else if (next === 'off' && prev === 'on') {
-      await this.recordWatering(reason, s);
+      await this.recordWatering(z, reason, s);
     }
     this.emit('change');
   }
 
-  private async recordWatering(reason: string, s: SprinklerStatus): Promise<void> {
+  private async recordWatering(z: Zone, reason: string, s: SprinklerStatus): Promise<void> {
     const now = new Date();
     const ranMs = s.onSince ? now.getTime() - Date.parse(s.onSince) : null;
     // After an ESP32 reboot the run's pulse count is gone; don't record a bogus 0 gal.
     const gallons = s.runGallons !== null && reason !== 'boot' ? Math.round(s.runGallons * 10) / 10 : undefined;
 
-    this.store.update({ lastOffAt: now.toISOString() });
+    this.store.updateZone(z.id, { lastOffAt: now.toISOString() });
     if (s.onSince && ranMs !== null) {
       this.store.addWatering({
+        zone: z.id,
         start: s.onSince,
         minutes: Math.round((ranMs / MIN) * 10) / 10,
-        reason: this.runReason ?? reason,
+        reason: z.runReason ?? reason,
         ...(gallons !== undefined && { gallons }),
       });
     }
-    this.runReason = null;
+    z.runReason = null;
 
     const ran = ranMs !== null ? ` after ${fmtDuration(ranMs)}` : '';
     const used = gallons !== undefined ? `, ${gallons.toFixed(1)} gal` : '';
-    this.store.log('off', `Sprinkler OFF${ran}${used} (${reason})`);
-    await notify('Sprinkler OFF', `${label(reason)}${ran}${used}.`, {
+    this.store.log('off', `${z.name} OFF${ran}${used} (${reason})`);
+    await notify(`${z.name} OFF`, `${label(reason)}${ran}${used}.`, {
       priority: reason === 'failsafe' ? 'high' : 'default',
     });
   }
 
   private async onOnlineChange(online: boolean): Promise<void> {
-    const wasAlerted = this.alerts.onOnlineChange(online);
+    const wasAlerted = this.zones[0]!.alerts.onOnlineChange(online);
     this.store.log('device', online ? 'Controller online' : 'Controller offline');
     if (online && wasAlerted) await notify('Sprinkler controller back online', 'The ESP32 reconnected.');
     this.emit('change');

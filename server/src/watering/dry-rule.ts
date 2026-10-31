@@ -1,16 +1,16 @@
 import type { Config } from '../config.js';
 import type { WeatherSnapshot } from '../integrations/weather.js';
-import type { PersistedState } from '../store.js';
+import type { PersistedState, ZoneState } from '../store.js';
 import { fmtDayTime, HOUR, MIN } from '../util/time.js';
 
-// The plain rule from before the AI: water for AUTO_RUN_MINUTES once it's been
-// DRY_HOURS_THRESHOLD hours since the last rain or watering, inside the morning window,
+// The plain rule from before the AI: water a zone for AUTO_RUN_MINUTES once it's been
+// DRY_HOURS_THRESHOLD hours since the last rain or since that zone was watered, inside the morning window,
 // unless it's raining or rain is forecast. With the AI in auto mode, this only runs on
 // days the AI couldn't decide.
 
 export interface DryRuleStatus {
   checkedAt: string;
-  dryClockFrom: string; // the later of last rain, last watering, install time
+  dryClockFrom: string; // the later of last rain, the zone's last watering, install time
   hoursDry: number;
   dueAt: string;
   isDue: boolean;
@@ -21,6 +21,7 @@ export interface DryRuleStatus {
 export interface DryRuleInput {
   now: Date;
   state: PersistedState;
+  zone: ZoneState;
   weather: WeatherSnapshot | null;
   valveOn: boolean;
   online: boolean;
@@ -28,10 +29,10 @@ export interface DryRuleInput {
   config: Pick<Config, 'schedule' | 'weather'>;
 }
 
-export function checkDryRule({ now, state, weather, valveOn, online, aiInCharge, config }: DryRuleInput): DryRuleStatus {
+export function checkDryRule({ now, state, zone, weather, valveOn, online, aiInCharge, config }: DryRuleInput): DryRuleStatus {
   const sc = config.schedule;
   const dryFrom = Math.max(
-    ...[state.lastRainAt, state.lastWateredAt, state.installedAt].filter((x): x is string => !!x).map(Date.parse),
+    ...[state.lastRainAt, zone.lastWateredAt, state.installedAt].filter((x): x is string => !!x).map(Date.parse),
   );
   const dueAt = dryFrom + sc.dryHoursThreshold * HOUR;
   const isDue = now.getTime() >= dueAt;
@@ -42,6 +43,7 @@ export function checkDryRule({ now, state, weather, valveOn, online, aiInCharge,
   const hour = now.getHours();
 
   if (!state.autoEnabled) blockedBy = 'Automatic watering is paused';
+  else if (!zone.autoEnabled) blockedBy = 'Automatic watering is off for this zone';
   else if (aiInCharge) blockedBy = 'AI gardener decides (auto mode)';
   else if (!isDue) blockedBy = null;
   else if (valveOn) blockedBy = 'Already running';

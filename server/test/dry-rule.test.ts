@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { config } from '../src/config.js';
 import type { WeatherSnapshot } from '../src/integrations/weather.js';
-import type { PersistedState } from '../src/store.js';
+import type { PersistedState, ZoneState } from '../src/store.js';
 import { checkDryRule, shouldRunNow } from '../src/watering/dry-rule.js';
 
 const now = new Date('2026-10-19T06:00:00'); // inside the 5-9 AM window
@@ -11,15 +11,21 @@ const daysAgo = (d: number) => new Date(now.getTime() - d * 86_400_000).toISOStr
 const state = (patch: Partial<PersistedState> = {}): PersistedState => ({
   installedAt: daysAgo(30),
   lastRainAt: daysAgo(20),
-  lastWateredAt: daysAgo(11), // 264 h > the 240 h default threshold
-  lastOffAt: null,
   autoEnabled: true,
+  zones: {},
   events: [],
   waterings: [],
   notes: [],
   aiMode: 'off',
   aiDecisions: [],
   aiFailedDate: null,
+  ...patch,
+});
+
+const zone = (patch: Partial<ZoneState> = {}): ZoneState => ({
+  lastWateredAt: daysAgo(11), // 264 h > the 240 h default threshold
+  lastOffAt: null,
+  autoEnabled: true,
   ...patch,
 });
 
@@ -36,7 +42,7 @@ const dryWeather: WeatherSnapshot = {
 };
 
 const check = (patch: Partial<Parameters<typeof checkDryRule>[0]> = {}) =>
-  checkDryRule({ now, state: state(), weather: dryWeather, valveOn: false, online: true, aiInCharge: false, config, ...patch });
+  checkDryRule({ now, state: state(), zone: zone(), weather: dryWeather, valveOn: false, online: true, aiInCharge: false, config, ...patch });
 
 describe('checkDryRule', () => {
   it('runs when due, dry and inside the window', () => {
@@ -69,8 +75,13 @@ describe('checkDryRule', () => {
     assert.match(r.blockedBy!, /Waiting for watering window/);
   });
 
-  it('stands down when paused or when the AI is in charge', () => {
+  it("counts from the zone's own last watering", () => {
+    assert.equal(check({ zone: zone({ lastWateredAt: daysAgo(1) }) }).isDue, false);
+  });
+
+  it('stands down when paused, off for the zone, or when the AI is in charge', () => {
     assert.equal(check({ state: state({ autoEnabled: false }) }).blockedBy, 'Automatic watering is paused');
+    assert.equal(check({ zone: zone({ autoEnabled: false }) }).blockedBy, 'Automatic watering is off for this zone');
     assert.equal(check({ aiInCharge: true }).blockedBy, 'AI gardener decides (auto mode)');
   });
 });

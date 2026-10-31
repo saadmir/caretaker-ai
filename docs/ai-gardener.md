@@ -25,11 +25,11 @@ so it needs no tools and no hidden memory:
 | Section | Source |
 |---|---|
 | `garden` | `garden.md`, my description of the site, plants and irrigation (kept private; see `garden.example.md`) |
-| `irrigation_system` | Measured flow rate (median of recent metered waterings), or the emitter estimate before there are any |
+| `irrigation_zones` | Per zone: measured flow rate (median of its recent metered waterings), the emitter estimate before there are any, or "unknown" with no meter and no emitter count |
 | `limits` | The same limits the guardrails enforce, so the model plans within them |
 | `daily_weather` | Open-Meteo: 14 past days, today and 2 forecast days. Rain, rain probability, high/low temperature, **ET0** (reference evapotranspiration), wind, humidity, sunshine |
 | `current_conditions` | Raining now? Rain total and probability for the next 24 h |
-| `watering_history_last_30_days` | Every watering with duration, reason and **measured gallons**. A near-zero reading is flagged as "supply off or sensor fault" |
+| `watering_history_last_30_days` | Every watering with its zone, duration, reason and **measured gallons**. A near-zero reading is flagged as "supply off or sensor fault" |
 | `your_previous_decisions` | Its own last 7 decisions and soil estimates, which give it continuity from day to day |
 | `owner_notes` | Notes I add on the dashboard ("bottom row looks shriveled", "planted new aloes"). The system prompt says these outrank rules of thumb |
 

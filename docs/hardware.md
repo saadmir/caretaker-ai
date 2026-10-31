@@ -63,7 +63,7 @@ How the sprinkler ESP32, relay, 24 VAC valve and flow meter connect. The firmwar
 4. Other valve solenoid wire → transformer terminal **B**. This is the "common" wire.
 5. Leave **`NC`** empty. If you use `NC` instead of `NO`, the valve stays open whenever the ESP32 is unpowered.
 
-With multiple valves later, every valve's second wire joins together onto **B** (the common). Each valve's first wire goes to its own relay's `NO`.
+With more valves, every valve's second wire joins together onto **B** (the common), and each valve's first wire goes to its own relay's `NO`. See [Adding a second zone](#adding-a-second-zone).
 
 ### 1c. Bench test (before connecting the valve)
 
@@ -134,6 +134,42 @@ ESP32 GND ──────────────────┘
 
 ---
 
+## Adding a second zone
+
+Each extra valve is a zone with its own relay channel. A 4-channel relay board drives up to four.
+
+**Low-voltage side.** Leave `VCC`, `GND` and `IN1` as they are, and add one wire from ESP32
+`GPIO 25` (`D25`; on a breakout board, its **S** pin) to the relay board's **`IN2`**. GPIO 25 sits
+next to GPIO 26, isn't a boot-strapping pin, and keeps clear of the flow meter on GPIO 27.
+
+**24 VAC side** (transformer unplugged):
+
+```
+Transformer A ──┬── Relay 1 COM          Relay 1 NO ── Valve 1 wire
+                └── Relay 2 COM          Relay 2 NO ── Valve 2 wire a
+
+Transformer B ──┬── Valve 1 other wire
+                └── Valve 2 wire b        (shared "common")
+```
+
+1. Jumper relay 1 `COM` to relay 2 `COM`, so both get transformer terminal A.
+2. Relay 2 `NO` → either wire of valve 2 (AC solenoids have no polarity).
+3. Valve 2's other wire joins valve 1's on transformer terminal **B**.
+4. Leave relay 2 `NC` empty. `NO` is the outer terminal in the same position as valve 1's on relay 1.
+
+**Firmware.** Set `RELAY_PINS {26, 25}` in `config.h` and flash (over Wi-Fi works). Zone numbers
+follow that order. `FLOW_ZONE` says which zone's outlet has the flow meter; a zone without one
+simply reports no flow.
+
+**Server.** Set `ZONE_COUNT=2` and the `ZONE2_…` settings in `.env` (see `.env.example`), describe
+the zone in `garden.md`, and restart. A new zone starts with automatic watering off: click-test its
+relay from the dashboard before connecting the valve wire, then turn on its **Auto** switch when ready.
+
+Both valves can run at once. A typical 24 VAC, 0.75 A or larger irrigation transformer handles two
+solenoids (about 0.2–0.4 A each).
+
+---
+
 ## Flow sensor
 
 A Hall-effect flow meter (for example the **FS400A G1"**, 1–60 L/min) on the valve's **outlet** side lets the server log the gallons of every watering. Inside, a magnet on the turbine passes a Hall sensor, which gives one pulse per bit of water: about **288 pulses per liter** (pulse frequency = 4.8 × L/min).
@@ -174,7 +210,7 @@ sensor red   ──────────────────────�
 sensor black ───────────────────────────── GND
 ```
 
-`GPIO 27` is right next to the relay's `GPIO 26` on most DevKits. It's set by `FLOW_PIN` in `config.h`.
+`GPIO 27` is right next to the relay's `GPIO 26` on most DevKits. It's set by `FLOW_PIN` in `config.h`, and `FLOW_ZONE` says which zone's valve it measures.
 
 ### Installation tips
 - Mount the sensor with the **arrow on its body pointing in the flow direction**. Put it on the outlet side of the valve, so it only sees water that the valve lets through. Use Teflon tape on the 1" threads.

@@ -3,7 +3,6 @@ import { timingSafeEqual } from 'node:crypto';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { config, parseAiMode } from '../config.js';
-import type { Sprinkler } from '../devices/sprinkler.js';
 import type { Store } from '../store.js';
 import type { WateringController } from '../watering/controller.js';
 import { snapshot } from './snapshot.js';
@@ -11,25 +10,27 @@ import { snapshot } from './snapshot.js';
 const publicDir = join(dirname(fileURLToPath(import.meta.url)), '..', '..', 'public');
 
 /** Dashboard + JSON API. Live updates go out over Server-Sent Events on /api/stream. */
-export function startWeb(sprinkler: Sprinkler, watering: WateringController, store: Store) {
+export function startWeb(watering: WateringController, store: Store) {
   const app = express();
   app.use(express.json());
   if (config.web.password) app.use(basicAuth(config.web.password));
 
-  const current = () => snapshot(sprinkler, watering, store);
+  const current = () => snapshot(watering, store);
   const fail = (res: Response, status: number, err: unknown) => res.status(status).json({ error: (err as Error).message });
 
   app.get('/api/status', (_req, res) => res.json(current()));
 
+  // zone defaults to 1, so single-zone scripts keep working
   app.post('/api/valve', (req, res) => {
-    const { action, minutes } = (req.body ?? {}) as { action?: string; minutes?: number | null };
+    const { action, minutes, zone } = (req.body ?? {}) as { action?: string; minutes?: number | null; zone?: number };
     try {
+      const zoneId = Number(zone ?? 1);
       if (action === 'on') {
         const m = minutes == null ? config.schedule.defaultManualMinutes : Number(minutes);
         if (!Number.isFinite(m) || m < 0 || m > 240) throw new Error('minutes must be 0-240 (0 = until turned off)');
-        watering.manualOn(m);
+        watering.manualOn(zoneId, m);
       } else if (action === 'off') {
-        watering.manualOff();
+        watering.manualOff(zoneId);
       } else {
         return res.status(400).json({ error: 'action must be "on" or "off"' });
       }
@@ -39,11 +40,17 @@ export function startWeb(sprinkler: Sprinkler, watering: WateringController, sto
     }
   });
 
+  // Without a zone: the master switch for all automatic watering. With one: that zone's switch.
   app.post('/api/auto', (req, res) => {
-    const { enabled } = (req.body ?? {}) as { enabled?: boolean };
+    const { enabled, zone } = (req.body ?? {}) as { enabled?: boolean; zone?: number };
     if (typeof enabled !== 'boolean') return res.status(400).json({ error: 'enabled must be boolean' });
-    watering.setAutoEnabled(enabled);
-    res.json({ ok: true });
+    try {
+      if (zone == null) watering.setAutoEnabled(enabled);
+      else watering.setZoneAutoEnabled(Number(zone), enabled);
+      res.json({ ok: true });
+    } catch (err) {
+      fail(res, 400, err);
+    }
   });
 
   app.post('/api/ai/mode', (req, res) => {

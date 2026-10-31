@@ -3,13 +3,13 @@ import { betaZodOutputFormat } from '@anthropic-ai/sdk/helpers/beta/zod';
 import { readFileSync } from 'node:fs';
 import { config, type AiMode } from '../config.js';
 import { fetchDailyWeather, type WeatherSnapshot } from '../integrations/weather.js';
-import type { AiDecisionRecord, PersistedState } from '../store.js';
+import type { AiDecisionRecord, PersistedState, ZonePlan } from '../store.js';
 import { applyGuardrails, planDateFor } from './plan.js';
 import { buildPrompt, SYSTEM_PROMPT } from './prompt.js';
 import { WateringDecision } from './schema.js';
 
-// The AI gardener: one Claude call per day that returns a structured watering plan.
-// The plan then goes through the guardrails before anything can act on it.
+// The AI gardener: one Claude call per day that returns a structured watering plan for
+// every zone. Each zone's plan then goes through the guardrails before anything can act on it.
 
 let client: Anthropic | null = null;
 
@@ -42,24 +42,30 @@ export async function decideWatering(
   const decision = res.parsed_output;
   if (!decision) throw new Error('The AI response could not be parsed');
 
-  const { cycles, adjustments } = applyGuardrails({
-    decision,
-    forDate,
-    now,
-    lastWateredAt: state.lastWateredAt,
-    limits: config.ai.limits,
-    window,
+  const zones = config.zones.map((zone): ZonePlan => {
+    const d = decision.zones.find((z) => z.zone === zone.id);
+    if (!d) {
+      return { zone: zone.id, action: 'skip', soilEstimate: 'unknown', note: '', cycles: [], adjustments: ['The AI gave no plan for this zone; skipping.'] };
+    }
+    const { cycles, adjustments } = applyGuardrails({
+      decision: d,
+      forDate,
+      now,
+      lastWateredAt: state.zones[zone.id]?.lastWateredAt ?? null,
+      limits: { ...config.ai.limits, minHoursBetweenWaterings: zone.minHoursBetweenWaterings },
+      window,
+    });
+    const action = cycles.length ? 'water' : 'skip';
+    return { zone: zone.id, action, soilEstimate: d.soil_estimate, note: d.note, cycles, adjustments };
   });
   return {
     decidedAt: now.toISOString(),
     forDate,
     mode,
-    action: cycles.length ? 'water' : 'skip',
+    action: zones.some((z) => z.action === 'water') ? 'water' : 'skip',
     headline: decision.headline,
     reasoning: decision.reasoning,
-    soilEstimate: decision.soil_estimate,
-    cycles,
-    adjustments,
+    zones,
     model: res.model,
     inputTokens: res.usage.input_tokens,
     outputTokens: res.usage.output_tokens,

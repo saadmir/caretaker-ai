@@ -81,6 +81,6 @@ wired backhaul, the house can fix this itself.
 
 - [ ] GitHub Actions: typecheck, unit tests and a firmware build on every push
 - [ ] Multi-device dashboard (one card per device)
-- [ ] Multiple irrigation zones
+- [x] Multiple irrigation zones (one ESP32, one relay per valve, a plan per zone from one AI call)
 - [ ] Soil moisture sensors
 - [ ] Backup and restore for `.env` and `state.json`; SQLite once the history outgrows a JSON file
